@@ -4,6 +4,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
+import text2emotion as te
 import string
 from collections import Counter
 import matplotlib.pyplot as plt
@@ -43,8 +44,8 @@ nltk.download('vader_lexicon')
 
 file_path = './FIFA.csv'
 data = pd.read_csv(file_path)
-# step_size = 10000
-# posts_per_step = 1000
+step_size = 1000000
+posts_per_step = 10000
 # start_index = 0
 # subset_list = []
 # while start_index < len(data):
@@ -52,16 +53,17 @@ data = pd.read_csv(file_path)
 #     subset_list.append(subset)
 #     start_index += step_size
 #
-# merged_data = pd.concat(subset_list, ignore_index=True)
+# data = pd.concat(subset_list, ignore_index=True)
+data = data[-10000:]
 data['Timestamp'] = pd.to_datetime(data['Date'])
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
 additional_stop_words = ["also", '’', '\"', '“', '”', "v", "vs"]
 stop_words.update(additional_stop_words)
-def preprocess(text):
-    tokens = word_tokenize(text)
-    tokens = [lemmatizer.lemmatize(token.lower()) for token in tokens if token.isalpha() and token.lower() not in stop_words]
-    return tokens
+# def preprocess(text):
+#     tokens = word_tokenize(text)
+#     tokens = [lemmatizer.lemmatize(token.lower()) for token in tokens if token.isalpha() and token.lower() not in stop_words]
+#     return tokens
 
 
 
@@ -80,7 +82,7 @@ def preprocess(text):
 #
 
 # ----- VADER ------
-# data['Sentiment'] = data['Tweet'].apply(lambda x: analyze_sentiment(x) if pd.notnull(x) else None)
+data['Sentiment'] = data['Tweet'].apply(lambda x: analyze_sentiment(x) if pd.notnull(x) else None)
 # data['Date'] = data['Date'].dt.date
 # daily_sentiment = data.groupby('Date')['Sentiment'].mean()
 # plt.figure(figsize=(12, 6))
@@ -129,49 +131,40 @@ def preprocess(text):
 # plt.show()
 
 # --- klastyeryzacja ----
-# def preprocess(text):
-#     tokens = word_tokenize(text)
-#     tokens = [lemmatizer.lemmatize(token.lower()) for token in tokens if token.isalpha() and token.lower() not in stop_words]
-#     return ' '.join(tokens)
-#
-# data['Clean_Tweet'] = data['Tweet'].apply(lambda x: preprocess(x) if pd.notnull(x) else '')
+def preprocess(text):
+    tokens = word_tokenize(text)
+    tokens = [lemmatizer.lemmatize(token.lower()) for token in tokens if token.isalpha() and token.lower() not in stop_words]
+    return ' '.join(tokens)
 
-# vectorizer = TfidfVectorizer(max_features=1000)
-# X = vectorizer.fit_transform(data['Clean_Tweet'])
-# lda = LatentDirichletAllocation(n_components=10, random_state=0)
-# lda.fit(X)
+data['Clean_Tweet'] = data['Tweet'].apply(lambda x: preprocess(x) if pd.notnull(x) else '')
 
-# def display_topics(model, feature_names, no_top_words):
-#     arr = []
-#     for topic_idx, topic in enumerate(model.components_):
-#         print(f"Topic {topic_idx}:")
-#         print(" ".join([feature_names[i] for i in topic.argsort()[:-no_top_words - 1:-1]]))
-#         arr.append(" ".join([feature_names[i] for i in topic.argsort()[:-no_top_words - 1:-1]]))
-#     return arr
-#
-#
-# array_topics = display_topics(lda, vectorizer.get_feature_names_out(), 3)
-# print(array_topics)
-# kmeans = KMeans(n_clusters=10, random_state=0)
-# data['Cluster'] = kmeans.fit_predict(X)
-#
-#
-# data['Date'] = data['Timestamp'].dt.date
-# daily_sentiment = data.groupby(['Date', 'Cluster'])['Sentiment'].mean().unstack()
-#
-## plt.figure(figsize=(12, 6))
-# i = 0
-# for cluster in daily_sentiment.columns:
-#     plt.plot(daily_sentiment.index, daily_sentiment[cluster], marker='o', label=f'Cluster: {array_topics[i]}')
-#     i+=1
-# plt.title('Zmiana sentymentu tweetów w czasie dla klastrów')
-# plt.xlabel('Data')
-# plt.ylabel('Średni sentyment')
-# plt.xticks(rotation=45)
-# plt.legend(title='Cluster')
-# plt.grid(True)
-# plt.tight_layout()
-# plt.show()
+vectorizer = TfidfVectorizer(max_features=1000)
+X = vectorizer.fit_transform(data['Clean_Tweet'])
+kmeans = KMeans(n_clusters=5, random_state=32)
+data['Cluster'] = kmeans.fit_predict(X)
+
+
+data['Date'] = data['Timestamp'].dt.date
+daily_sentiment = data.groupby(['Date', 'Cluster'])['Sentiment'].mean().unstack()
+feature_names = vectorizer.get_feature_names_out()  # Pobierz nazwy cech (słów)
+order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]  # Sortuj indeksy centrów klastrów
+for cluster_id in range(5):
+    print(f"Cluster {cluster_id}:\n")
+    sample_tweets = data[data['Cluster'] == cluster_id]['Tweet'].sample(5)  # Wybierz losowe 5 tweetów z klastra
+    for tweet in sample_tweets:
+        print(tweet)
+    print("\n")
+plt.figure(figsize=(12, 6))
+for cluster in daily_sentiment.columns:
+    plt.plot(daily_sentiment.index, daily_sentiment[cluster], marker='o', label=f'Cluster: {cluster}')
+plt.title('Zmiana sentymentu tweetów w czasie dla klastrów')
+plt.xlabel('Data')
+plt.ylabel('Średni sentyment')
+plt.xticks(rotation=45)
+plt.legend(title='Cluster')
+plt.grid(True)
+plt.tight_layout()
+plt.show()
 
 
 # ----- WordCloud ------
@@ -183,6 +176,37 @@ def preprocess(text):
 # plt.axis('off')
 # plt.show()
 
+# ---- Text2Emotions ----
+
+# def preprocess(text):
+#     tokens = word_tokenize(text)
+#     tokens = [lemmatizer.lemmatize(token.lower()) for token in tokens if token.isalpha() and token.lower() not in stop_words]
+#     return ' '.join(tokens)
+#
+# data['Clean_Tweet'] = data['Tweet'].apply(lambda x: preprocess(x) if pd.notnull(x) else '')
+#
+# # Analiza emocji
+# def analyze_emotions(text):
+#     emotions = te.get_emotion(text)
+#     return emotions
+#
+# data['Emotions'] = data['Clean_Tweet'].apply(lambda x: analyze_emotions(x) if x else None)
+# #
+# # Przekształcenie danych emocji do DataFrame
+# emotion_columns = ['Happy', 'Angry', 'Surprise', 'Sad', 'Fear']
+# for emotion in emotion_columns:
+#     data[emotion] = data['Emotions'].apply(lambda x: x[emotion] if x else 0)
+#
+# # Sumowanie emocji dla wszystkich tweetów
+# emotion_sums = data[emotion_columns].sum()
+#
+# # Wizualizacja wyników
+# plt.figure(figsize=(10, 6))
+# sns.barplot(x=emotion_sums.index, y=emotion_sums.values/10000)
+# plt.title('Sum of Emotions in Tweets')
+# plt.xlabel('Emotions')
+# plt.ylabel('Sum')
+# plt.show()
 
 """
 Aby wykonać analizę emocji z użyciem biblioteki text2emotion, musisz najpierw zainstalować bibliotekę text2emotion i zaimportować ją do swojego projektu. Poniżej znajduje się przykładowy kod, który pokazuje, jak zintegrować text2emotion z przetwarzaniem tekstu, analizą emocji i wizualizacją wyników.
