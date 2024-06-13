@@ -4,7 +4,7 @@ from nltk.tokenize import word_tokenize
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.corpus import wordnet
-import text2emotion as te
+# import text2emotion as te
 import string
 from collections import Counter
 import matplotlib.pyplot as plt
@@ -54,7 +54,8 @@ posts_per_step = 10000
 #     start_index += step_size
 #
 # data = pd.concat(subset_list, ignore_index=True)
-data = data[-10000:]
+data = data[-1000:]
+print(data)
 data['Timestamp'] = pd.to_datetime(data['Date'])
 stop_words = set(stopwords.words('english'))
 lemmatizer = WordNetLemmatizer()
@@ -82,7 +83,7 @@ stop_words.update(additional_stop_words)
 #
 
 # ----- VADER ------
-data['Sentiment'] = data['Tweet'].apply(lambda x: analyze_sentiment(x) if pd.notnull(x) else None)
+# data['Sentiment'] = data['Tweet'].apply(lambda x: analyze_sentiment(x) if pd.notnull(x) else None)
 # data['Date'] = data['Date'].dt.date
 # daily_sentiment = data.groupby('Date')['Sentiment'].mean()
 # plt.figure(figsize=(12, 6))
@@ -137,35 +138,44 @@ def preprocess(text):
     return ' '.join(tokens)
 
 data['Clean_Tweet'] = data['Tweet'].apply(lambda x: preprocess(x) if pd.notnull(x) else '')
-
 vectorizer = TfidfVectorizer(max_features=1000)
 X = vectorizer.fit_transform(data['Clean_Tweet'])
+lda = LatentDirichletAllocation(n_components=5, random_state=0)
+lda.fit(X)
+
+# Wyświetlenie tematów
+def display_topics(model, feature_names, no_top_words):
+    for topic_idx, topic in enumerate(model.components_):
+        print(f"Topic {topic_idx}:")
+        print(" ".join([feature_names[i] for i in topic.argsort()[:-no_top_words - 1:-1]]))
+
+display_topics(lda, vectorizer.get_feature_names_out(), 4)
 kmeans = KMeans(n_clusters=5, random_state=32)
 data['Cluster'] = kmeans.fit_predict(X)
-
-
-data['Date'] = data['Timestamp'].dt.date
-daily_sentiment = data.groupby(['Date', 'Cluster'])['Sentiment'].mean().unstack()
-feature_names = vectorizer.get_feature_names_out()  # Pobierz nazwy cech (słów)
-order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]  # Sortuj indeksy centrów klastrów
-for cluster_id in range(5):
-    print(f"Cluster {cluster_id}:\n")
-    sample_tweets = data[data['Cluster'] == cluster_id]['Tweet'].sample(5)  # Wybierz losowe 5 tweetów z klastra
-    for tweet in sample_tweets:
-        print(tweet)
-    print("\n")
-plt.figure(figsize=(12, 6))
-for cluster in daily_sentiment.columns:
-    plt.plot(daily_sentiment.index, daily_sentiment[cluster], marker='o', label=f'Cluster: {cluster}')
-plt.title('Zmiana sentymentu tweetów w czasie dla klastrów')
-plt.xlabel('Data')
-plt.ylabel('Średni sentyment')
-plt.xticks(rotation=45)
-plt.legend(title='Cluster')
-plt.grid(True)
-plt.tight_layout()
-plt.show()
-
+data["Labels"] = kmeans.labels_
+#
+# data['Date'] = data['Timestamp'].dt.date
+# daily_sentiment = data.groupby(['Date', 'Cluster'])['Sentiment'].mean().unstack()
+# feature_names = vectorizer.get_feature_names_out()  # Pobierz nazwy cech (słów)
+# order_centroids = kmeans.cluster_centers_.argsort()[:, ::-1]  # Sortuj indeksy centrów klastrów
+# for cluster_id in range(5):
+#     print(f"Cluster {cluster_id}:\n")
+#     sample_tweets = data[data['Cluster'] == cluster_id]['Tweet'].sample(5)  # Wybierz losowe 5 tweetów z klastra
+#     for tweet in sample_tweets:
+#         print(tweet)
+#     print("\n")
+# plt.figure(figsize=(12, 6))
+# for cluster in daily_sentiment.columns:
+#     plt.plot(daily_sentiment.index, daily_sentiment[cluster], marker='o', label=f'Cluster: {cluster}')
+# plt.title('Zmiana sentymentu tweetów w czasie dla klastrów')
+# plt.xlabel('Data')
+# plt.ylabel('Średni sentyment')
+# plt.xticks(rotation=45)
+# plt.legend(title='Cluster')
+# plt.grid(True)
+# plt.tight_layout()
+# plt.show()
+#
 
 # ----- WordCloud ------
 
